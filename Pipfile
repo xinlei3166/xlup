@@ -1,0 +1,25 @@
+[[source]]
+# url = "https://pypi.org/simple"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+aiofiles = "*"
+aiomysql = "*"
+aioredis = "*"
+pyjwt = "*"
+sanic = "*"
+pytest-sanic = "*"
+sanic-cors = "*"
+sanic-plugins-framework = "==0.6.4.dev20181101"
+shortuuid = "*"
+xlform = "*"
+hashids = "*"
+peewee-migrate = "*"
+sanic-script = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.7"
