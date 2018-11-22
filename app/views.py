@@ -299,6 +299,16 @@ class UserMeHeadimg(View):
         return await self.change_head_image(request, user_id)
 
 
+class UserMeAccessSecret(View):
+    """用户上传秘钥"""
+
+    def get(self, request, **kwargs):
+        pass
+
+    def post(self, request, **kwargs):
+        pass
+
+
 class Pic(View):
     """图片"""
 
