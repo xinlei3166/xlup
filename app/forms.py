@@ -26,3 +26,12 @@ class PicUploadForm(Form):
     title = CharField(max_length=32, required=False)
     description = CharField(max_length=64, required=False)
     pic = Field(validators=[validate_file])
+
+
+class VideoUploadForm(Form):
+    """视频上传表单"""
+    title = CharField(max_length=32, required=False)
+    description = CharField(max_length=64, required=False)
+    pic = Field(validators=[validate_file])
+    video = Field(validators=[validate_file])
+

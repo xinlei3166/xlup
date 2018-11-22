@@ -81,6 +81,7 @@ class PyMySQL:
                 try:
                     await cur.execute(sql, args)
                 except BaseException as e:
+                    print(e)
                     await conn.rollback()
                     return
                 else:

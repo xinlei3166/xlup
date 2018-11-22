@@ -7,9 +7,9 @@ import time
 import json
 import pathlib
 import datetime
-import base64
-import binascii
 import shortuuid
+import collections
+import itertools
 from sanic.blueprints import Blueprint
 from sanic.views import HTTPMethodView as View
 from sanic import response
@@ -20,7 +20,7 @@ from utils.token import token
 from utils.exceptions import APIParameterError
 from utils.decorators import check_token, check_permission, cache
 from utils.paginator import Paginator
-from .forms import PicUploadForm
+from . import forms
 
 web = Blueprint('xlup', url_prefix='api')
 
@@ -89,7 +89,7 @@ class RefreshToken(View):
             return response.json({'code': 'InvalidTokenSub', 'msg': 'invalid access_token sub'})
         else:
             return response.json(
-                {'code': 'SUCCESS',
+                {'code': 'Success',
                  'data': {'access_token': await UserAuth.generate_token(request, user, token_type='access_token')}})
 
 
@@ -119,7 +119,7 @@ class UserLogout(View):
                                     expire=access_payload.get('exp') - now)
         await request.app.cache.set('refresh_token_{}'.format(refresh_token), json.dumps(False),
                                     expire=refresh_payload.get('exp') - now)
-        return response.json({'code': 'SUCCESS'})
+        return response.json({'code': 'Success'})
 
 
 class UserMe(View):
@@ -129,10 +129,11 @@ class UserMe(View):
     async def get_userinfo(self, request, user_id, **kwargs):
         cache_key = kwargs.get('cache_key')
         expire = kwargs.get('expire')
-        default_head_img = "{}/media/default.png".format(request.app.config.UPLOAD_DOMAIN)
+        prefix = "{}/media/".format(request.app.config.UPLOAD_DOMAIN)
+        default_head_img = "default.png"
         userinfo = await request.app.db.get(
-            "select user.id, user.username, user.nickname, ifnull(user.head_img, %s) as head_img, user.gender, user.email, user.phone, role.name as role_name from user join role on user.role_id = role.id where user.id = %s;",
-            (default_head_img, user_id))
+            "select user.id, user.username, user.nickname, concat(%s, ifnull(user.head_img, %s)) as head_img, user.gender, user.email, user.phone, role.name as role_name from user join role on user.role_id = role.id where user.id = %s;",
+            (prefix, default_head_img, user_id))
         await request.app.cache.set(cache_key, json.dumps(userinfo), expire=expire)
         return userinfo
 
@@ -144,98 +145,158 @@ class UserMe(View):
         return response.json({'code': 'Success', 'data': userinfo})
 
     @classmethod
-    def change_head_image(cls, request, head_img):
-        """修改头像"""
-        reg = re.compile(r'^{}(.*?)$'.format(request.app.config.UPLOAD_DOMAIN))
-        try:
-            _head_img = reg.findall(head_img).pop()
-        except IndexError:
-            pass    # todo here
+    async def validate_nickname(cls, nickname, **kwargs):
+        """验证昵称"""
+        if not re.fullmatch(r'[\s\w-]{2,20}', nickname):
+            return response.json({'code': 'InvalidNickname', 'msg': 'nickname ==> min_length: 2, max_length: 20'})
+
+    @classmethod
+    async def validate_gender(cls, gender, **kwargs):
+        """验证性别"""
+        if gender not in ['male', 'female']:
+            return response.json({'code': 'InvalidGender', 'msg': 'gender ==> male or female'})
+
+    @classmethod
+    async def validate_phone(cls, phone, **kwargs):
+        """验证手机号"""
+        if not re.match('^1[3456789]\d{9}$', phone):
+            return response.json({'code': 'InvalidPhone', 'msg': 'phone ==> length: 11, format: 1[3456789]\d{9}'})
+        user = kwargs.get('user')
+        db = kwargs.get('db')
+        if phone != user['phone']:
+            res = await db.get("select user.id from user where user.phone = %s;", (phone,))
+            if res:
+                return response.json({'code': 'PhoneExist', 'msg': 'phone exist'})
+
+    @classmethod
+    async def validate_email(cls, email, **kwargs):
+        """验证邮箱"""
+        if not re.match(r'^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$', email):
+            return response.json({'code': 'InvalidEmail', 'msg': 'email ==> xxx@qq.com}'})
+        user = kwargs.get('user')
+        db = kwargs.get('db')
+        if email != user['email']:
+            res = await db.get("select user.id from user where user.email = %s;", (email,))
+            if res:
+                return response.json({'code': 'EmailExist', 'msg': 'email exist'})
+
+    @classmethod
+    async def write_table(cls, db, user, keys=(), values=()):
+        """写入数据库"""
+        field = ','.join(["%s=%%s" % key for key in keys])
+        sql = "update user set {} where user.id = %s;".format(field)
+        res = await db.update(sql, tuple(itertools.chain(values, [user['id']])))
+        if res is None:
+            return response.json({'code': 'UpdateUserinfoFail', 'msg': 'update userinfo fail'})
+        return response.json({'code': 'Success'})
+
+    @check_token
+    async def patch(self, request, **kwargs):
+        """修改用户部分信息"""
+        user_id = kwargs.get('user_id')
+        user = await request.app.db.get(
+            "select user.id, user.username, user.nickname, user.gender, user.phone, user.email from user where user.id = %s;",
+            (user_id,))
+        if not user:
+            return response.json({'code': 'UsernameNotExist', 'msg': 'username not exist'})
+        allows = ('nickname', 'gender', 'phone', 'email')
+        data = {k: request.form.get(k) for k in request.form.keys()}
+        db = request.app.db
+        for k, v in data.items():
+            if k not in allows:
+                return response.json({'code': 'InvalidParams', 'msg': 'contains invalid params'})
+            if v:
+                res = await getattr(self, 'validate_{}'.format(k))(v, user=user, db=db)
+                if res:
+                    return res
+        return await self.write_table(db, user, tuple(data.keys()), tuple(data.values()))
+
+
+class UserMePassword(View):
+    """用户密码"""
+
+    @classmethod
+    async def change_password(cls, request, user):
+        """修改密码"""
+        old_password = request.form.get('old_password')
+        new_password = request.form.get('new_password')
+        if not all([old_password, new_password]):
+            return response.json({'code': 'InvalidParams', 'msg': 'missing params'})
+        if user['password'] != hmac_sha256(user['secret'], old_password):
+            return response.json({'code': 'IncorrectOldPassword', 'msg': 'incorrect old password'})
+        if not re.fullmatch(r'\w{6,20}', new_password):
+            return response.json(
+                {'code': 'user.InvalidNewPassword', 'msg': 'new password ==> min_length: 6, max_length: 20'})
+        password = hmac_sha256(user['secret'], new_password)
+        res = await request.app.db.update("update user set user.password = %s where user.id = %s;", (password, user['id']))
+        if not res:
+            return response.json({'code': 'UpdatePasswordFail', 'msg': 'update password fail'})
+        return response.json({'code': 'Success'})
+
+    @check_token
+    async def put(self, request, **kwargs):
+        user_id = kwargs.get('user_id')
+        user = await request.app.db.get(
+            "select user.id, user.username, user.password, user_secret.secret from user join user_secret on user.id = user_secret.user_id where user.id = %s;",
+            (user_id,))
+        if not user:
+            return response.json({'code': 'UsernameNotExist', 'msg': 'username not exist'})
+        return await self.change_password(request, user)
+
+
+class UserMeHeadimg(View):
+    """用户头像"""
 
     # @classmethod
     # def change_head_image(cls, head_img):
     #     """修改头像"""
+    #     reg = re.compile(r'^{}(.*?)$'.format(request.app.config.UPLOAD_DOMAIN))
     #     try:
-    #         _content = base64.b64decode(head_img.split(',')[1])  # 图片内容
-    #         _suffix = head_img.split(';')[0].split('/')[1] if len(head_img.split(';')) == 2 else 'png'  # 图片后缀名
-    #     except (IndexError, binascii.Error):
-    #         return response.json({'code': 'InvalidHeadimg', 'msg': 'invalid head_img'})
-    #     _head_image = ContentFile(_content, shortuuid.ShortUUID().random(length=10) + '.{}'.format(_suffix))
-    #     try:
-    #         headimage = HeadImage.objects.get(shopmalluser=user)
-    #     except HeadImage.DoesNotExist:
-    #         headimage = HeadImage.objects.create(shopmalluser=user)
-    #     headimage.head_image = _head_image
-    #     headimage.save()
-
-    # @classmethod
-    # def change_nickname(cls, nickname, user):
-    #     """修改昵称"""
-    #     if not re.fullmatch(r'[\s\w-]{2,20}', nickname):
-    #         return JsonResponse({'code': 'user.INVALID_NICKNAME', 'msg': 'nickname ==> min_length: 2, max_length: 20'})
-    #     user.nickname = nickname
-    #     user.save()
-    #
-    # @classmethod
-    # def change_sex(cls, sex, user):
-    #     """修改性别"""
-    #     if sex not in ['男', '女']:
-    #         return JsonResponse({'code': 'user.INVALID_SEX', 'msg': 'sex ==> 男 or 女'})
-    #     user.sex = sex
-    #     user.save()
-    #
-    # @classmethod
-    # def change_phone_num(cls, phone_num, user):
-    #     """修改手机号"""
-    #     if not re.match('^1[3456789]\d{9}$', phone_num):
-    #         return JsonResponse(
-    #             {'code': 'user.INVALID_PHONE_NUM', 'msg': 'phone_num ==> length: 11, format: 1[3456789]\d{9}'})
-    #     if phone_num != user.phone_num and User.objects.filter(phone_num=phone_num):
-    #         return JsonResponse({'code': 'user.PHONENUM_EXIST', 'msg': 'phone number exist'})
-    #     user.phone_num = phone_num
-    #     user.save()
-    #
-    # @classmethod
-    # def change_password(cls, password, user):
-    #     """修改密码"""
-    #     try:
-    #         passwords = password.split(',')
-    #         old_password = passwords[0]
-    #         first_password = passwords[1]
-    #         second_password = passwords[2]
+    #         _head_img = reg.findall(head_img).pop()
     #     except IndexError:
-    #         return response.json({'code': 'user.PASSWORD_FORMAT_ERROR', 'msg': 'password example: 123456,45678,45678'})
-    #     usersecret = UserSecret.objects.get(uid=user.uid)
-    #     if hmac_sha256(usersecret.secret, old_password) != user.password:
-    #         return response.json({'code': 'user.OLDPASSWORD_INCORRECT', 'msg': 'old password incorrect'})
-    #     if first_password != second_password:
-    #         return response.json({'code': 'user.TWOPASSWORDS_NOT_MATCH', 'msg': 'the two passwords not match'})
-    #     if not re.fullmatch(r'\w{6,20}', first_password):
-    #         return response.json(
-    #             {'code': 'user.INVALID_NEWPASSWORD', 'msg': 'new password ==> min_length: 6, max_length: 20'})
-    #     user.password = hmac_sha256(usersecret.secret, first_password)
-    #     user.save()
-    #
-    # @method_decorator(check_token)
-    # def patch(self, request, **kwargs):
-    #     """修改用户局部信息"""
-    #     uid = kwargs.get('uid')
-    #     try:
-    #         user = User.objects.get(uid=uid, delete_flag=False)
-    #     except User.DoesNotExist:
-    #         return JsonResponse({'code': 'user.USER_NOT_EXIST', 'msg': 'user not exist'})
-    #
-    #     allows = ('head_image', 'nickname', 'sex', 'phone_num', 'password')
-    #     data = {k: v for k, v in QueryDict(request.body, encoding='utf-8').items()}
-    #     for k, v in data.items():
-    #         if k not in allows:
-    #             return response.json({'code': 'user.INVALID_PARAMS', 'msg': 'contains invalid params'})
-    #         if v is not None:
-    #             res = getattr(self, 'change_{}'.format(k))(v, user)
-    #             if res:
-    #                 return res
-    #
-    #     return response.json({'code': 'SUCCESS'})
+    #         return response.json({'code': 'InvalidHeadimg', 'msg': 'invalid head_img'})
+    #     else:
+    #         return _head_img
+
+    @classmethod
+    async def change_head_image(cls, request, user_id):
+        """修改头像"""
+        head_img = request.files.get('head_img', None)
+        if head_img is None:
+            return response.json({'code': 'InvalidParams', 'msg': 'missing head_img'})
+        # try:
+        #     content = base64.b64decode(head_img.split(',')[1])  # 图片内容
+        #     suffix = head_img.split(';')[0].split('/')[1] if len(head_img.split(';')) == 2 else 'png'  # 图片后缀名
+        # except (IndexError, binascii.Error):
+        #     return response.json({'code': 'InvalidHeadimg', 'msg': 'invalid head_img'})
+        content = head_img.body
+        suffix = head_img.type.split('/')[1]
+        path = pathlib.Path(request.app.config.MEDIA_DIR)
+        rel_path = datetime.datetime.now().strftime('%Y/%m/%d')
+        filename = "{}.{}".format(shortuuid.ShortUUID().random(length=12), suffix)
+        filepath = path.joinpath('pic', rel_path, filename)
+        media_path = pathlib.Path('pic', rel_path, filename)
+        media_path = str(media_path.relative_to('.'))
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with filepath.open('wb') as f:
+            f.write(content)
+        if not filepath.exists():
+            return response.json({'code': 'UpdateHeadimgFail', 'msg': 'update headimg fail'})
+        user = await request.app.db.get("select user.head_img from user where user.id = %s", (user_id,))
+        old_head_img = user['head_img']
+        if old_head_img:
+            old_filepath = path.joinpath(old_head_img)
+            old_filepath.unlink()
+        res = await request.app.db.update(
+            "update user set head_img = %s where id = %s;", (media_path, user_id))
+        if not res:
+            return response.json({'code': 'UpdateHeadimgFail', 'msg': 'update headimg fail'})
+        return response.json({'code': 'Success'})
+
+    @check_token
+    async def post(self, request, **kwargs):
+        user_id = kwargs.get('user_id')
+        return await self.change_head_image(request, user_id)
 
 
 class Pic(View):
@@ -245,6 +306,7 @@ class Pic(View):
     async def get(self, request, **kwargs):
         """查看图片"""
         user_id = kwargs.get('user_id')
+        prefix = "{}/media/".format(request.app.config.UPLOAD_DOMAIN)
         q = request.raw_args.get('q')
         page = int(request.raw_args.get('page', 1))
         per_page = int(request.raw_args.get('per_page', 10))
@@ -254,36 +316,44 @@ class Pic(View):
                 "select count(id) as count from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0;", ('%%%s%%' % q, user_id))
             count = count_res['count']
             res = await request.app.db.query(
-                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as link, pic.`create_time`, pic.`update_time` from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
-                (request.app.config.UPLOAD_DOMAIN, '%%%s%%' % q, user_id, _start, per_page))
+                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, pic.`create_time`, pic.`update_time` from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
+                (prefix, '%%%s%%' % q, user_id, _start, per_page))
         else:
             count_res = await request.app.db.get("select count(id) as count from pic where pic.`user_id` = %s and pic.`delete_flag` = 0;", (user_id,))
             count = count_res['count']
             res = await request.app.db.query(
-                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as link, pic.`create_time`, pic.`update_time` from pic where pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
-                (request.app.config.UPLOAD_DOMAIN, user_id, _start, per_page))
+                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, pic.`create_time`, pic.`update_time` from pic where pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
+                (prefix, user_id, _start, per_page))
         paginate = Paginator(count, per_page)
         pages = paginate()
-        return response.json({'code': 'SUCCESS', 'pages': pages, 'data': res}, dumps=json_dumps)
+        return response.json({'code': 'Success', 'pages': pages, 'data': res}, dumps=json_dumps)
+
+    @classmethod
+    def write_pic(cls, path, pic):
+        rel_path = datetime.datetime.now().strftime('%Y/%m/%d')
+        suffix = pic.type.split('/')[-1]
+        filename = "{}.{}".format(shortuuid.ShortUUID().random(length=12), suffix)
+        filepath = path.joinpath('pic', rel_path, filename)
+        media_path = pathlib.Path('pic', rel_path, filename)
+        media_path = str(media_path.relative_to('.'))
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with filepath.open('wb') as f:
+            f.write(pic.body)
+        if filepath.exists():
+            return media_path
 
     @classmethod
     async def upload_pic(cls, request, user_id, data):
-        form = PicUploadForm(data)
+        form = forms.PicUploadForm(data)
         if form.is_valid():
             form_data = form.cleaned_data
             pic = form_data['pic']
+            file_type = pic.type.split('/')[0]
+            if file_type != 'image':
+                return response.json({'code': 'PicFormatError', 'msg': 'pic format error'})
             path = pathlib.Path(request.app.config.MEDIA_DIR)
-            media_path = pathlib.Path('/media')
-            rel_path = datetime.datetime.now().strftime('%Y/%m/%d')
-            suffix = pic.type.split('/')[-1]
-            filename = "{}.{}".format(shortuuid.ShortUUID().random(length=12), suffix)
-            filepath = path.joinpath('pic', rel_path, filename)
-            media_path = media_path.joinpath('pic', rel_path, filename)
-            media_path = str(media_path.resolve())
-            filepath.parent.mkdir(parents=True, exist_ok=True)
-            with filepath.open('wb') as f:
-                f.write(pic.body)
-            if not filepath.exists():
+            media_path = cls.write_pic(path, pic)
+            if not media_path:
                 return response.json({'code': 'UploadFail', 'msg': 'uplopad pic fail'})
             res = await request.app.db.create(
                 "insert into pic(pic.`user_id`, pic.`title`, pic.`description`, pic.`path`) values(%s, %s, %s, %s);",
@@ -291,7 +361,7 @@ class Pic(View):
             if not res:
                 return response.json({'code': 'UploadFail', 'msg': 'uplopad pic fail'})
             _data = {'title': form_data['title'], 'description': form_data['description'],
-                     'link': "{}{}".format(request.app.config.UPLOAD_DOMAIN, media_path)}
+                     'pic': "{}/media/{}".format(request.app.config.UPLOAD_DOMAIN, media_path)}
             return response.json({'code': 'Success', 'data': _data})
         else:
             return response.json({'code': 'InvalidParams', 'msg': form.errors})
@@ -304,3 +374,129 @@ class Pic(View):
         _file = {k: request.files.get(k) for k in request.files.keys()}
         data.update(_file)
         return await self.upload_pic(request, user_id, data)
+
+
+class PicDetails(View):
+    """单个图片"""
+
+    @check_token
+    async def delete(self, request, pic_id, **kwargs):
+        """删除图片"""
+        user_id = kwargs.get('user_id')
+        pic = await request.app.db.get("select pic.id, pic.path from pic where pic.user_id = %s and pic.id = %s", (user_id, pic_id))
+        if not pic:
+            return response.json({'code': 'PicNotExist', 'msg': 'pic not exist'})
+        path = pathlib.Path(request.app.config.MEDIA_DIR)
+        filepath = path.joinpath(pic['path'])
+        if filepath.exists():
+            filepath.unlink()
+        res = await request.app.db.delete("delete from pic where pic.user_id = %s and pic.id = %s", (user_id, pic_id))
+        if res is not None:
+            return response.json({'code': 'Success'})
+        return response.json({'code': 'DeletePicFail', 'msg': 'delete pic fail'})
+
+
+class Video(View):
+    """视频"""
+
+    @check_token
+    async def get(self, request, **kwargs):
+        """查看视频"""
+        user_id = kwargs.get('user_id')
+        prefix = "{}/media/".format(request.app.config.UPLOAD_DOMAIN)
+        q = request.raw_args.get('q')
+        page = int(request.raw_args.get('page', 1))
+        per_page = int(request.raw_args.get('per_page', 10))
+        _start = (page - 1) * per_page
+        if q:
+            count_res = await request.app.db.get(
+                "select count(id) as count from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`user_id` = %s and video.`delete_flag` = 0;", ('%%%s%%' % q, user_id))
+            count = count_res['count']
+            res = await request.app.db.query(
+                "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, video.`create_time`, video.`update_time` from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`user_id` = %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
+                (prefix, prefix, '%%%s%%' % q, user_id, _start, per_page))
+        else:
+            count_res = await request.app.db.get("select count(id) as count from video where video.`user_id` = %s and video.`delete_flag` = 0;", (user_id,))
+            count = count_res['count']
+            res = await request.app.db.query(
+                "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, video.`create_time`, video.`update_time` from video where video.`user_id` = %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
+                (prefix, prefix, user_id, _start, per_page))
+        paginate = Paginator(count, per_page)
+        pages = paginate()
+        return response.json({'code': 'Success', 'pages': pages, 'data': res}, dumps=json_dumps)
+
+    @classmethod
+    def write_video(cls, path, video):
+        rel_path = datetime.datetime.now().strftime('%Y/%m/%d')
+        suffix = video.type.split('/')[-1]
+        filename = "{}.{}".format(shortuuid.ShortUUID().random(length=12), suffix)
+        filepath = path.joinpath('video', rel_path, filename)
+        media_path = pathlib.Path('video', rel_path, filename)
+        media_path = str(media_path.relative_to('.'))
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with filepath.open('wb') as f:
+            f.write(video.body)
+        if filepath.exists():
+            return media_path
+
+    @classmethod
+    async def upload_video(cls, request, user_id, data):
+        form = forms.VideoUploadForm(data)
+        if form.is_valid():
+            form_data = form.cleaned_data
+            pic = form_data['pic']
+            pic_type = pic.type.split('/')[0]
+            if pic_type != 'image':
+                return response.json({'code': 'PicFormatError', 'msg': 'pic format error'})
+            video = form_data['video']
+            video_type = video.type.split('/')[0]
+            if video_type != 'video':
+                return response.json({'code': 'VideoFormatError', 'msg': 'video format error'})
+            path = pathlib.Path(request.app.config.MEDIA_DIR)
+            pic_media_path = Pic.write_pic(path, pic)
+            video_media_path = cls.write_video(path, video)
+            if not pic_media_path or not video_media_path:
+                return response.json({'code': 'UploadFail', 'msg': 'uplopad video fail'})
+            res = await request.app.db.create(
+                "insert into video(video.`user_id`, video.`title`, video.`description`, video.`pic`, video.`path`) values(%s, %s, %s, %s, %s);",
+                (user_id, form_data['title'], form_data['description'], pic_media_path, video_media_path))
+            if not res:
+                return response.json({'code': 'UploadFail', 'msg': 'uplopad pic fail'})
+            _data = {'title': form_data['title'], 'description': form_data['description'],
+                     'pic': "{}/media/{}".format(request.app.config.UPLOAD_DOMAIN, pic_media_path),
+                     'video': "{}/media/{}".format(request.app.config.UPLOAD_DOMAIN, video_media_path)}
+            return response.json({'code': 'Success', 'data': _data})
+        else:
+            return response.json({'code': 'InvalidParams', 'msg': form.errors})
+
+    @check_token
+    async def post(self, request, **kwargs):
+        """上传视频"""
+        user_id = kwargs.get('user_id')
+        data = {k: request.form.get(k) for k in request.form.keys()}
+        _file = {k: request.files.get(k) for k in request.files.keys()}
+        data.update(_file)
+        return await self.upload_video(request, user_id, data)
+
+
+class VideoDetails(View):
+    """单个视频"""
+
+    @check_token
+    async def delete(self, request, video_id, **kwargs):
+        """删除视频"""
+        user_id = kwargs.get('user_id')
+        video = await request.app.db.get("select video.id, video.pic, video.path from video where video.user_id = %s and video.id = %s", (user_id, video_id))
+        if not video:
+            return response.json({'code': 'VideoNotExist', 'msg': 'video not exist'})
+        path = pathlib.Path(request.app.config.MEDIA_DIR)
+        picpath = path.joinpath(video['pic'])
+        if picpath.exists():
+            picpath.unlink()
+        videopath = path.joinpath(video['path'])
+        if videopath.exists():
+            videopath.unlink()
+        res = await request.app.db.delete("delete from video where video.user_id = %s and video.id = %s", (user_id, video_id))
+        if res is not None:
+            return response.json({'code': 'Success'})
+        return response.json({'code': 'DeleteVideoFail', 'msg': 'delete video fail'})
