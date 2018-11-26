@@ -18,11 +18,12 @@ from jwt import InvalidTokenError, ExpiredSignature
 from utils.base import json_dumps, hmac_sha256, hashid_encode, hashid_decode
 from utils.token import token
 from utils.exceptions import APIParameterError
-from utils.decorators import check_token, check_permission, cache
+from utils.decorators import check_token, check_permission, cache, check_access_sign
 from utils.paginator import Paginator
+from utils.access_key import generate_access_key_id, generate_access_key_secret
 from . import forms
 
-web = Blueprint('xlup', url_prefix='api')
+web = Blueprint('xlup')
 
 
 class UserAuth(View):
@@ -32,11 +33,13 @@ class UserAuth(View):
     async def generate_token(cls, request, user, *, token_type):
         key = request.app.config.auth_key
         if token_type == 'refresh_token':  # 生成refresh_token
-            _token = token.generate_refresh_token(key, sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
+            _token = token.generate_refresh_token(key,
+                                                  sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
                                                   expires_in=token.refresh_expires_in,
                                                   role=user['role_codename'])
         else:  # 生成access_token
-            _token = token.generate_access_token(key, sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
+            _token = token.generate_access_token(key,
+                                                 sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
                                                  expires_in=token.access_expires_in,
                                                  role=user['role_codename'])
         return _token
@@ -56,7 +59,8 @@ class UserAuth(View):
             return response.json(
                 {'code': 'Success',
                  'data': {'access_token': await self.generate_token(request, user, token_type='access_token'),
-                          'refresh_token': await self.generate_token(request, user, token_type='refresh_token')}})
+                          'refresh_token': await self.generate_token(request, user,
+                                                                     token_type='refresh_token')}})
         else:
             return response.json({'code': 'IncorrectPassword', 'msg': 'incorrect password'})
 
@@ -90,7 +94,8 @@ class RefreshToken(View):
         else:
             return response.json(
                 {'code': 'Success',
-                 'data': {'access_token': await UserAuth.generate_token(request, user, token_type='access_token')}})
+                 'data': {'access_token': await UserAuth.generate_token(request, user,
+                                                                        token_type='access_token')}})
 
 
 class UserLogout(View):
@@ -148,7 +153,8 @@ class UserMe(View):
     async def validate_nickname(cls, nickname, **kwargs):
         """验证昵称"""
         if not re.fullmatch(r'[\s\w-]{2,20}', nickname):
-            return response.json({'code': 'InvalidNickname', 'msg': 'nickname ==> min_length: 2, max_length: 20'})
+            return response.json(
+                {'code': 'InvalidNickname', 'msg': 'nickname ==> min_length: 2, max_length: 20'})
 
     @classmethod
     async def validate_gender(cls, gender, **kwargs):
@@ -160,7 +166,8 @@ class UserMe(View):
     async def validate_phone(cls, phone, **kwargs):
         """验证手机号"""
         if not re.match('^1[3456789]\d{9}$', phone):
-            return response.json({'code': 'InvalidPhone', 'msg': 'phone ==> length: 11, format: 1[3456789]\d{9}'})
+            return response.json(
+                {'code': 'InvalidPhone', 'msg': 'phone ==> length: 11, format: 1[3456789]\d{9}'})
         user = kwargs.get('user')
         db = kwargs.get('db')
         if phone != user['phone']:
@@ -228,7 +235,8 @@ class UserMePassword(View):
             return response.json(
                 {'code': 'user.InvalidNewPassword', 'msg': 'new password ==> min_length: 6, max_length: 20'})
         password = hmac_sha256(user['secret'], new_password)
-        res = await request.app.db.update("update user set user.password = %s where user.id = %s;", (password, user['id']))
+        res = await request.app.db.update("update user set user.password = %s where user.id = %s;",
+                                          (password, user['id']))
         if not res:
             return response.json({'code': 'UpdatePasswordFail', 'msg': 'update password fail'})
         return response.json({'code': 'Success'})
@@ -299,14 +307,36 @@ class UserMeHeadimg(View):
         return await self.change_head_image(request, user_id)
 
 
-class UserMeAccessSecret(View):
+class UserMeAccessKey(View):
     """用户上传秘钥"""
 
-    def get(self, request, **kwargs):
-        pass
+    @check_token
+    async def get(self, request, **kwargs):
+        user_id = kwargs.get('user_id')
+        access_key = await request.app.db.get(
+            "select access_key_id, access_key_secret, create_time from access_key where user_id = %s;",
+            (user_id,))
+        if access_key:
+            return response.json({'code': 'Success', 'data': access_key}, dumps=json_dumps)
+        return response.json({'code': 'AccessKeyNotExist', 'msg': 'access key not exist'}, dumps=json_dumps)
 
-    def post(self, request, **kwargs):
-        pass
+    @check_token
+    async def post(self, request, **kwargs):
+        user_id = kwargs.get('user_id')
+        access_key_id = generate_access_key_id()
+        access_key_secret = generate_access_key_secret(request.app.config.auth_key, access_key_id)
+        access_key = await request.app.db.get("select id from access_key where user_id = %s;", (user_id,))
+        if access_key:
+            return response.json({'code': 'AccessKeyExist', 'msg': 'access key exist'}, dumps=json_dumps)
+        res = await request.app.db.create(
+            "insert into access_key(user_id, access_key_id, access_key_secret) values(%s, %s, %s)",
+            (user_id, access_key_id, access_key_secret))
+        if res:
+            return response.json(
+                {'code': 'Success',
+                 'data': {'access_key_id': access_key_id, 'access_key_secret': access_key_secret}},
+                dumps=json_dumps)
+        return response.json({'code': 'NewAccessKeyFail', 'msg': 'new access key fail'}, dumps=json_dumps)
 
 
 class Pic(View):
@@ -323,13 +353,16 @@ class Pic(View):
         _start = (page - 1) * per_page
         if q:
             count_res = await request.app.db.get(
-                "select count(id) as count from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0;", ('%%%s%%' % q, user_id))
+                "select count(id) as count from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0;",
+                ('%%%s%%' % q, user_id))
             count = count_res['count']
             res = await request.app.db.query(
                 "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, pic.`create_time`, pic.`update_time` from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
                 (prefix, '%%%s%%' % q, user_id, _start, per_page))
         else:
-            count_res = await request.app.db.get("select count(id) as count from pic where pic.`user_id` = %s and pic.`delete_flag` = 0;", (user_id,))
+            count_res = await request.app.db.get(
+                "select count(id) as count from pic where pic.`user_id` = %s and pic.`delete_flag` = 0;",
+                (user_id,))
             count = count_res['count']
             res = await request.app.db.query(
                 "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, pic.`create_time`, pic.`update_time` from pic where pic.`user_id` = %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
@@ -393,17 +426,33 @@ class PicDetails(View):
     async def delete(self, request, pic_id, **kwargs):
         """删除图片"""
         user_id = kwargs.get('user_id')
-        pic = await request.app.db.get("select pic.id, pic.path from pic where pic.user_id = %s and pic.id = %s", (user_id, pic_id))
+        pic = await request.app.db.get(
+            "select pic.id, pic.path from pic where pic.user_id = %s and pic.id = %s",
+            (user_id, pic_id))
         if not pic:
             return response.json({'code': 'PicNotExist', 'msg': 'pic not exist'})
         path = pathlib.Path(request.app.config.MEDIA_DIR)
         filepath = path.joinpath(pic['path'])
         if filepath.exists():
             filepath.unlink()
-        res = await request.app.db.delete("delete from pic where pic.user_id = %s and pic.id = %s", (user_id, pic_id))
+        res = await request.app.db.delete("delete from pic where pic.user_id = %s and pic.id = %s",
+                                          (user_id, pic_id))
         if res is not None:
             return response.json({'code': 'Success'})
         return response.json({'code': 'DeletePicFail', 'msg': 'delete pic fail'})
+
+
+class PicUnAuth(View):
+    """图片"""
+
+    @check_access_sign
+    async def post(self, request, **kwargs):
+        """上传图片"""
+        user_id = kwargs.get('user_id')
+        data = {k: request.form.get(k) for k in request.form.keys()}
+        _file = {k: request.files.get(k) for k in request.files.keys()}
+        data.update(_file)
+        return await Pic.upload_pic(request, user_id, data)
 
 
 class Video(View):
@@ -420,13 +469,16 @@ class Video(View):
         _start = (page - 1) * per_page
         if q:
             count_res = await request.app.db.get(
-                "select count(id) as count from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`user_id` = %s and video.`delete_flag` = 0;", ('%%%s%%' % q, user_id))
+                "select count(id) as count from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`user_id` = %s and video.`delete_flag` = 0;",
+                ('%%%s%%' % q, user_id))
             count = count_res['count']
             res = await request.app.db.query(
                 "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, video.`create_time`, video.`update_time` from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`user_id` = %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
                 (prefix, prefix, '%%%s%%' % q, user_id, _start, per_page))
         else:
-            count_res = await request.app.db.get("select count(id) as count from video where video.`user_id` = %s and video.`delete_flag` = 0;", (user_id,))
+            count_res = await request.app.db.get(
+                "select count(id) as count from video where video.`user_id` = %s and video.`delete_flag` = 0;",
+                (user_id,))
             count = count_res['count']
             res = await request.app.db.query(
                 "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, video.`create_time`, video.`update_time` from video where video.`user_id` = %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
@@ -496,7 +548,9 @@ class VideoDetails(View):
     async def delete(self, request, video_id, **kwargs):
         """删除视频"""
         user_id = kwargs.get('user_id')
-        video = await request.app.db.get("select video.id, video.pic, video.path from video where video.user_id = %s and video.id = %s", (user_id, video_id))
+        video = await request.app.db.get(
+            "select video.id, video.pic, video.path from video where video.user_id = %s and video.id = %s",
+            (user_id, video_id))
         if not video:
             return response.json({'code': 'VideoNotExist', 'msg': 'video not exist'})
         path = pathlib.Path(request.app.config.MEDIA_DIR)
@@ -506,7 +560,21 @@ class VideoDetails(View):
         videopath = path.joinpath(video['path'])
         if videopath.exists():
             videopath.unlink()
-        res = await request.app.db.delete("delete from video where video.user_id = %s and video.id = %s", (user_id, video_id))
+        res = await request.app.db.delete("delete from video where video.user_id = %s and video.id = %s",
+                                          (user_id, video_id))
         if res is not None:
             return response.json({'code': 'Success'})
         return response.json({'code': 'DeleteVideoFail', 'msg': 'delete video fail'})
+
+
+class VideoUnAuth(View):
+    """视频"""
+
+    @check_access_sign
+    async def post(self, request, **kwargs):
+        """上传视频"""
+        user_id = kwargs.get('user_id')
+        data = {k: request.form.get(k) for k in request.form.keys()}
+        _file = {k: request.files.get(k) for k in request.files.keys()}
+        data.update(_file)
+        return await Video.upload_video(request, user_id, data)

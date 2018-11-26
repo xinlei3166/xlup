@@ -8,6 +8,7 @@ from functools import wraps
 from sanic import response
 from utils.token import token
 from utils.base import hashid_decode
+from utils.access_key import get_access_key_secret, generate_policy_sign
 from jwt.exceptions import InvalidTokenError, ExpiredSignature
 
 
@@ -72,3 +73,25 @@ def cache(*, expire=None):
             return data
         return inner
     return outer
+
+
+def check_access_sign(coro):
+    """检测access_sign是否合法"""
+    @wraps(coro)
+    async def inner(self, request, *args, **kwargs):
+        access_key_id = request.form.get('access_key_id')
+        policy = request.form.get('policy')
+        sign = request.form.get('sign')
+        if not all([access_key_id, policy, sign]):
+            return response.json({'code': 'InvalidParams', 'msg': 'missing access_key_id or policy or sign'})
+        access_key_secret = await get_access_key_secret(request.app.db, access_key_id)
+        if not access_key_secret:
+            return response.json({'code': 'AccessKeyNotExist', 'msg': 'access key not exist'})
+        if sign != generate_policy_sign(access_key_secret, policy):
+            return response.json({'code': 'InvalidSign', 'msg': 'invalid sign'})
+        user = await request.app.db.get("select u.id from user u join access_key a on u.id = a.user_id where a.access_key_id = %s", (access_key_id,))
+        if not user:
+            return response.json({'code': 'UserNotExist', 'msg': 'user not exist'})
+        return await coro(self, request, access_key_id=access_key_id, policy=policy, user_id=user['id'], *args, **kwargs)
+    return inner
+

@@ -6,6 +6,5 @@ from admin import admin, views
 
 
 def setup_admin_routes():
-    pass
-    # admin.add_route(views.RFIDAdmin.as_view(), '/rfids', name='RFIDAdmin')
+    admin.add_route(views.UserAdmin.as_view(), '/users', name='UserAdmin')
 

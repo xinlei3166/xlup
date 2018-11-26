@@ -40,12 +40,13 @@ class Setting(BaseModel):
         table_name = 'setting'
 
 
-class AccessSecret(BaseModel):
+class AccessKey(BaseModel):
+    user_id = IntegerField(verbose_name='用户', index=True)
     access_key_id = CharField(max_length=64)
     access_key_secret = CharField(max_length=64)
 
     class Meta:
-        table_name = 'access_secret'
+        table_name = 'access_key'
 
 
 class Role(BaseModel):

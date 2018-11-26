@@ -37,6 +37,9 @@ def migrate(migrator, database, fake=False, **kwargs):
     _User = migrator.orm['user']
     head_img = pw.CharField(verbose_name='头像', max_length=128, null=True)
     migrator.change_fields(_User, head_img=head_img)
+    _AccessKey = migrator.orm['access_key']
+    user_id = pw.IntegerField(verbose_name='用户', index=True, unique=True)
+    migrator.add_fields(_AccessKey, user_id=user_id)
 
 
 def rollback(migrator, database, fake=False, **kwargs):
