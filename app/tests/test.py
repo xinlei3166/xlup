@@ -11,6 +11,7 @@ Usages:
 import pytest
 from main import app as webserver
 
+
 # @pytest.yield_fixture
 # def app():
 #     app = Sanic("test_sanic_app")
@@ -31,6 +32,7 @@ def app():
 def test_cli(loop, app, test_client):
     return loop.run_until_complete(test_client(app))
 
+
 #########
 # Tests #
 #########
@@ -50,4 +52,3 @@ async def test_fixture_test_erpsync_get(test_cli):
     resp_json = await resp.json()
     print('url ==> {}, result ==> {}'.format(url, resp_json))
     assert resp_json.get('code') == 'SUCCESS'
-

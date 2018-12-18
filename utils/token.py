@@ -94,7 +94,8 @@ class JWT:
         return token.decode('utf8')
 
     def decode(self, key, token, verify=True):
-        payload = jwt.decode(token, key, algorithms=[self.alg], headers={'typ': self.typ, 'alg': self.alg}, verify=verify)
+        payload = jwt.decode(token, key, algorithms=[self.alg], headers={'typ': self.typ, 'alg': self.alg},
+                             verify=verify)
         if payload:
             if self.verify_jti(payload.get('jti')) and self.verify_sub(payload.get('sub')):
                 return payload
@@ -118,7 +119,8 @@ class JWT:
 
     def refresh_access_token(self, key, refresh_token):
         refresh_payload = self.decode(key, refresh_token)
-        access_token = self.generate_access_token(key, refresh_payload.get('sub'), self.access_expires_in, scopes=refresh_payload.get('scopes'))
+        access_token = self.generate_access_token(key, refresh_payload.get('sub'), self.access_expires_in,
+                                                  scopes=refresh_payload.get('scopes'))
         return access_token
 
 

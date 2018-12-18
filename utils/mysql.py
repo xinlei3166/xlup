@@ -5,6 +5,7 @@ __author__ = 'junxi'
 import aiomysql
 from sanic.log import logger
 
+
 # def log(sql, args=()):
 #     logger.info('SQL: %s' % sql, *args)
 
@@ -108,10 +109,14 @@ class PyMySQL:
     async def _async_init(self):
         """定义mysql连接池"""
         logger.info('create database connection pool...')
-        self.mysql_pool = await aiomysql.create_pool(host=self._database['host'], port=self._database['port'], user=self._database['user'],
-            password=self._database['password'], db=self._database['db'], loop=self._loop,
-            charset=self._database['charset'], autocommit=self._database['autocommit'],
-            maxsize=self._database['maxsize'], minsize=self._database['minsize'])
+        self.mysql_pool = await aiomysql.create_pool(host=self._database['host'], port=self._database['port'],
+                                                     user=self._database['user'],
+                                                     password=self._database['password'], db=self._database['db'],
+                                                     loop=self._loop,
+                                                     charset=self._database['charset'],
+                                                     autocommit=self._database['autocommit'],
+                                                     maxsize=self._database['maxsize'],
+                                                     minsize=self._database['minsize'])
         return self
 
     async def __aenter__(self):

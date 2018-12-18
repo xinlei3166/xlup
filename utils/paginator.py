@@ -19,4 +19,3 @@ class Paginator:
         else:
             pages = 1
         return pages
-

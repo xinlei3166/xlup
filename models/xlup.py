@@ -1,7 +1,8 @@
 from peewee import *
 from config.settings import DATABASE
 
-kwargs = {'charset': DATABASE['charset'], 'use_unicode': True, 'user': DATABASE['user'], 'password': DATABASE['password']}
+kwargs = {'charset': DATABASE['charset'], 'use_unicode': True, 'user': DATABASE['user'],
+          'password': DATABASE['password']}
 db = MySQLDatabase(DATABASE['db'], **kwargs)
 
 
@@ -12,7 +13,8 @@ class UnknownField(object):
 class BaseModel(Model):
     delete_flag = BooleanField(verbose_name='删除标志', constraints=[SQL("DEFAULT 0")])
     create_time = DateTimeField(verbose_name='创建时间', constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
-    update_time = DateTimeField(verbose_name='修改时间', constraints=[SQL("DEFAULT CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP")])
+    update_time = DateTimeField(verbose_name='修改时间',
+                                constraints=[SQL("DEFAULT CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP")])
 
     class Meta:
         database = db
@@ -99,5 +101,3 @@ class Video(BaseModel):
 
     class Meta:
         table_name = 'video'
-
-

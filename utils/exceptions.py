@@ -22,4 +22,3 @@ class APIParameterError(APIError):
 
 class APIValidationError(APIError):
     """接口参数验证错误"""
-

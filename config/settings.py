@@ -9,11 +9,9 @@ try:
 except ImportError:
     ENVIRONMENT = 'develop'
 
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # 项目路径
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目路径
 
 HASH_KEY = '95c0e5b348af14522bb880e44e7f2d79'
-
 
 if ENVIRONMENT == 'production':  # 生产环境
     DATABASE = {
@@ -42,7 +40,7 @@ if ENVIRONMENT == 'production':  # 生产环境
 
     UPLOAD_DOMAIN = 'http://uploads.lovecantouch.com'
 
-else:   # 本地环境
+else:  # 本地环境
     DATABASE = {
         'engine': 'mysql',
         'db': 'xlup',
@@ -68,5 +66,3 @@ else:   # 本地环境
     MEDIA_DIR = os.path.join(BASE_DIR, 'uploads')  # 上传文件路径
 
     UPLOAD_DOMAIN = 'http://localhost:9000'
-
-

@@ -40,8 +40,8 @@ def generate_policy(expires=0, max_content_size=1024 * 1024 * 5, **kwargs):
 
 def generate_policy_sign(key, policy):
     base64policy = convert_base64(policy)
-    return base64.b64encode(hmac.new(key.encode('utf-8'), base64policy.encode('utf-8'), hashlib.sha1).digest()).decode('utf-8')
-
+    return base64.b64encode(hmac.new(key.encode('utf-8'), base64policy.encode('utf-8'), hashlib.sha1).digest()).decode(
+        'utf-8')
 
 # policy = generate_policy()
 # print(policy)

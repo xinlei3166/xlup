@@ -12,5 +12,3 @@ class UserAddForm(Form):
     gender = RegexField(r'^(male|female)$', max_length=6)
     phone = RegexField(r'^1[356789]\d{9}', max_length=11, required=False)
     email = RegexField(r'^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$', max_length=64, required=False)
-
-

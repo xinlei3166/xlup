@@ -14,6 +14,7 @@ from jwt.exceptions import InvalidTokenError, ExpiredSignature
 
 def check_token(coro):
     """检测token是否合法"""
+
     @wraps(coro)
     async def inner(self, request, *args, **kwargs):
         access_token = request.headers.get('Authorization')
@@ -40,11 +41,13 @@ def check_token(coro):
         if not user:
             return response.json({'code': 'InvalidTokenSub', 'msg': 'invalid access_token sub'})
         return await coro(self, request, user_id=user_id, role=payload.get('role'), *args, **kwargs)
+
     return inner
 
 
 def check_permission(permission=None):
     """检查权限"""
+
     def outer(coro):
         @wraps(coro)
         @check_token
@@ -55,12 +58,15 @@ def check_permission(permission=None):
             if role != 'admin':
                 return response.json({'code': 'PermissionDenied', 'msg': 'permission denied'})
             return await coro(self, request, *args, **kwargs)
+
         return inner
+
     return outer
 
 
 def cache(*, expire=None):
     """缓存数据"""
+
     def outer(coro):
         @wraps(coro)
         async def inner(self, request, *args, **kwargs):
@@ -71,12 +77,15 @@ def cache(*, expire=None):
             else:
                 data = json.loads(cache_data)
             return data
+
         return inner
+
     return outer
 
 
 def check_access_sign(coro):
     """检测access_sign是否合法"""
+
     @wraps(coro)
     async def inner(self, request, *args, **kwargs):
         access_key_id = request.form.get('access_key_id')
@@ -89,9 +98,12 @@ def check_access_sign(coro):
             return response.json({'code': 'AccessKeyNotExist', 'msg': 'access key not exist'})
         if sign != generate_policy_sign(access_key_secret, policy):
             return response.json({'code': 'InvalidSign', 'msg': 'invalid sign'})
-        user = await request.app.db.get("select u.id from user u join access_key a on u.id = a.user_id where a.access_key_id = %s", (access_key_id,))
+        user = await request.app.db.get(
+            "select u.id from user u join access_key a on u.id = a.user_id where a.access_key_id = %s",
+            (access_key_id,))
         if not user:
             return response.json({'code': 'UserNotExist', 'msg': 'user not exist'})
-        return await coro(self, request, access_key_id=access_key_id, policy=policy, user_id=user['id'], *args, **kwargs)
-    return inner
+        return await coro(self, request, access_key_id=access_key_id, policy=policy, user_id=user['id'], *args,
+                          **kwargs)
 
+    return inner

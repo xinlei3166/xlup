@@ -85,9 +85,9 @@ class Cache:
         """定义redis连接池"""
         logger.info('create redis connection pool...')
         self.reids_pool = await aioredis.create_pool(address=self._cache['address'], db=self._cache['db'],
-            password=self._cache['password'],
-            minsize=self._cache['minsize'], maxsize=self._cache['maxsize'],
-            loop=self._loop)
+                                                     password=self._cache['password'],
+                                                     minsize=self._cache['minsize'], maxsize=self._cache['maxsize'],
+                                                     loop=self._loop)
         return self
 
     async def __aenter__(self):

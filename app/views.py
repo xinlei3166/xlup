@@ -36,16 +36,19 @@ class UserAuth(View):
             _token = token.generate_refresh_token(key,
                                                   sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
                                                   expires_in=token.refresh_expires_in,
+                                                  # expires_in=10,
                                                   role=user['role_codename'])
         else:  # 生成access_token
             _token = token.generate_access_token(key,
                                                  sub=hashid_encode(request.app.config.HASH_KEY, user['id']),
                                                  expires_in=token.access_expires_in,
+                                                 # expires_in=5,
                                                  role=user['role_codename'])
         return _token
 
     async def login(self, request):
         """账户登录"""
+        print(request.form)
         username = request.form.get('username')
         password = request.form.get('password')
         if not all([username, password]):
@@ -137,7 +140,7 @@ class UserMe(View):
         prefix = "{}/media/".format(request.app.config.UPLOAD_DOMAIN)
         default_head_img = "default.png"
         userinfo = await request.app.db.get(
-            "select user.id, user.username, user.nickname, concat(%s, ifnull(user.head_img, %s)) as head_img, user.gender, user.email, user.phone, role.name as role_name from user join role on user.role_id = role.id where user.id = %s;",
+            "select user.nickname, concat(%s, ifnull(user.head_img, %s)) as head_img, user.gender, user.email, user.phone, role.name as role_name, role.codename as role_codename from user join role on user.role_id = role.id where user.id = %s;",
             (prefix, default_head_img, user_id))
         await request.app.cache.set(cache_key, json.dumps(userinfo), expire=expire)
         return userinfo
@@ -369,7 +372,7 @@ class Pic(View):
                 (prefix, user_id, _start, per_page))
         paginate = Paginator(count, per_page)
         pages = paginate()
-        return response.json({'code': 'Success', 'pages': pages, 'data': res}, dumps=json_dumps)
+        return response.json({'code': 'Success', 'total': count, 'pages': pages, 'data': res}, dumps=json_dumps)
 
     @classmethod
     def write_pic(cls, path, pic):
@@ -485,7 +488,7 @@ class Video(View):
                 (prefix, prefix, user_id, _start, per_page))
         paginate = Paginator(count, per_page)
         pages = paginate()
-        return response.json({'code': 'Success', 'pages': pages, 'data': res}, dumps=json_dumps)
+        return response.json({'code': 'Success', 'total': count, 'pages': pages, 'data': res}, dumps=json_dumps)
 
     @classmethod
     def write_video(cls, path, video):

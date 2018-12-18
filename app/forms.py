@@ -34,4 +34,3 @@ class VideoUploadForm(Form):
     description = CharField(max_length=64, required=False)
     pic = Field(validators=[validate_file])
     video = Field(validators=[validate_file])
-
