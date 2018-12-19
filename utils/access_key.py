@@ -25,10 +25,6 @@ def generate_access_key_secret(key, access_key_id):
     return carry_key_hash_md5(key, access_key_id)
 
 
-def convert_base64(json_data):
-    return base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
-
-
 def generate_policy(expires=0, max_content_size=1024 * 1024 * 5, **kwargs):
     policy = dict()
     policy['issued'] = int(time.time())
@@ -36,6 +32,10 @@ def generate_policy(expires=0, max_content_size=1024 * 1024 * 5, **kwargs):
     policy['max_content_size'] = max_content_size
     policy.update(kwargs)
     return json.dumps(policy)
+
+
+def convert_base64(json_data):
+    return base64.b64encode(json_data.encode('utf-8')).decode('utf-8')
 
 
 def generate_policy_sign(key, policy):

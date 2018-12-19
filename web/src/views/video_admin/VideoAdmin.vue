@@ -1,9 +1,9 @@
 <template>
     <div>
         <Card>
-            <MyTable :columns="columns" :data="data"></MyTable>
+            <MyTable ref="table" :height="tableHeight" :columns="columns" :data="data"></MyTable>
         </Card>
-        <Paginator ref="paginator" :total="total" :onChange="onChange" :onPageSizeChange="onPageSizeChange"></Paginator>
+        <Paginator ref="paginator" :total="total" :currentPage="currentPage" :pageSize="pageSize" :onChange="onChange" :onPageSizeChange="onPageSizeChange"></Paginator>
     </div>
 </template>
 
@@ -118,13 +118,16 @@
             }
         ]
 
+        tableHeight = 0
+
         currentPage = 1
-        pageSize = 10
+        pageSize = 20
         data = []
         total = 0
 
         async created() {
             await this.getData()
+            this.tableHeight = window.innerHeight - (this.$refs.table as any).$el.offsetTop - 250
         }
 
         async getData(): Promise<void> {

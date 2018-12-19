@@ -81,7 +81,7 @@
             </Header>
             <Content class="layout-content">
                 <Layout class="layout-content-layout">
-                    <Breadcrumb :style="{margin: '24px 0 12px 0'}">
+                    <Breadcrumb :style="{margin: '24px 0 18px 0'}">
                         <template v-for="item in $route.matched">
                             <BreadcrumbItem>{{ item.meta.title }}</BreadcrumbItem>
                         </template>
@@ -259,6 +259,8 @@
             padding 5px 20px 20px 0
             height calc(100% - 80px)
             overflow auto
+            &::-webkit-scrollbar
+                display none
 
     .layout-footer
         margin-top 10px

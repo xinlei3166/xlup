@@ -8,7 +8,7 @@
 
     @Component
     export default class MyTable extends Vue {
-        @Prop({type: Number, default: 516}) private height!: number
+        @Prop({type: [Number, String], default: 520}) private height!: number|string
         @Prop({type: Boolean, default: true}) private highlightRow!: boolean
         @Prop({type: String, default: '暂无数据'}) private noDataText!: string
         @Prop({type: String, default: '没有找到你要搜索的数据'}) private noFilteredDataText!: string

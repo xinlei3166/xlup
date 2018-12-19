@@ -1,6 +1,6 @@
 <template>
     <div>
-        <Card>
+        <Card ref="card">
             <div class="search-con">
                 <Input clearable placeholder="输入关键字搜索" class="search-input"/>
                 <Button class="search-btn" type="primary">搜索</Button>
@@ -37,9 +37,10 @@
                     </Form>
                 </Modal>
             </div>
-            <MyTable :showSearch="true" :columns="columns" :data="data"></MyTable>
+            <MyTable ref="table" :height="tableHeight" :columns="columns" :data="data"></MyTable>
         </Card>
-        <Paginator ref="paginator" :total="total" :onChange="onChange" :onPageSizeChange="onPageSizeChange"></Paginator>
+        <Paginator ref="paginator" :total="total" :currentPage="currentPage" :pageSize="pageSize" :onChange="onChange"
+                   :onPageSizeChange="onPageSizeChange"></Paginator>
     </div>
 </template>
 
@@ -47,9 +48,9 @@
     import {Component, Vue, Watch} from "vue-property-decorator";
     import MyTable from "@/components/MyTable.vue"
     import Paginator from "@/components/Paginator.vue"
-    import { checkToken } from "@/utils/decorators"
-    import { tooltip } from "@/utils/util"
-    import { getUserAdminApi, postUserAdminApi, deleteUserAdminApi } from "@/api/user"
+    import {checkToken} from "@/utils/decorators"
+    import {tooltip} from "@/utils/util"
+    import {getUserAdminApi, postUserAdminApi, deleteUserAdminApi} from "@/api/user"
 
     @Component({
         components: {MyTable, Paginator}
@@ -98,7 +99,7 @@
                 // ellipsis: true,
                 // tooltip: true
                 render: (h, params) => {
-                   return tooltip(h, params.row.create_time, 16)
+                    return tooltip(h, params.row.create_time, 16)
                 }
             },
             {
@@ -198,13 +199,16 @@
             ]
         }
 
+        tableHeight = 0
+
         currentPage = 1
-        pageSize = 10
+        pageSize = 20
         data = []
         total = 0
 
         async created() {
             await this.getData()
+            this.tableHeight = window.innerHeight - (this.$refs.table as any).$el.offsetTop - 250
         }
 
         async getData(): Promise<void> {

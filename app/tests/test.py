@@ -39,16 +39,16 @@ def test_cli(loop, app, test_client):
 
 
 token = 'Bearer '
-token += 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJIaUFxaDMzc1NtemJoV1d3dlBWZTU0IiwiaXNzIjoiTUdDIE9ubGluZSIsImlhdCI6MTU0MjI2OTQyOSwiZXhwIjoxNTQyMzU1ODI5LCJzdWIiOiJ6d000UFgiLCJ0b2tlbl90eXBlIjoiYWNjZXNzX3Rva2VuIiwic2NvcGVzIjpbXSwicm9sZSI6ImFkbWluIn0.DAjMaNFVF7chKUZQ65lMrYn6zWFGjX3gcoAiQuburqM'
+token += 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJDWFg4OXFwVFNBa3ZEcnM3WWprc25tIiwiaXNzIjoiTUdDIE9ubGluZSIsImlhdCI6MTU0NTIyNjUyMCwiZXhwIjoxNTQ1MzEyOTIwLCJzdWIiOiJ6d000UFgiLCJ0b2tlbl90eXBlIjoiYWNjZXNzX3Rva2VuIiwic2NvcGVzIjpbXSwicm9sZSI6ImFkbWluIn0.SKEbD5IUNXoT4Sp0GhuW798zJGniF9ESCwKd0aNvqCE'
 HEADERS = {'Authorization': token}
 
 
-async def test_fixture_test_erpsync_get(test_cli):
+async def test_fixture_test_pics_get(test_cli):
     """测试 ==> 接口"""
-    params = {'rfid': ''}
-    url = '/wabpcode'
-    resp = await test_cli.get(url, params=params)
+    params = {'q': '标题'}
+    url = '/pics'
+    resp = await test_cli.get(url, params=params, headers=HEADERS)
     assert resp.status == 200
     resp_json = await resp.json()
     print('url ==> {}, result ==> {}'.format(url, resp_json))
-    assert resp_json.get('code') == 'SUCCESS'
+    assert resp_json.get('code') == 'Success'
