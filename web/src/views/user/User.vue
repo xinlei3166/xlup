@@ -1,15 +1,11 @@
 <template>
     <Card>
         <Tabs value="userInfo">
-            <TabPane label="个人信息" name="userInfo">
-                <UserInfo/>
-            </TabPane>
-            <!--<TabPane label="修改基本信息" name="changeUserInfo">标签二的内容</TabPane>-->
-            <!--<TabPane label="修改密码" name="changePassword">标签三的内容</TabPane>-->
-            <!--<TabPane label="修改头像" name="changeHeadimg">标签三的内容</TabPane>-->
-            <TabPane label="秘钥管理" name="accessSecret">
-                <UserAccessKey/>
-            </TabPane>
+            <TabPane label="个人信息" name="userInfo"><UserInfo/></TabPane>
+            <TabPane label="修改基本信息" name="changeUserInfo"><ChangeUserInfo/></TabPane>
+            <TabPane label="修改密码" name="changePassword"><ChangePassword/></TabPane>
+            <TabPane label="修改头像" name="changeHeadimg"><ChangeHeadimg/></TabPane>
+            <TabPane label="秘钥管理" name="accessSecret"><UserAccessKey/></TabPane>
         </Tabs>
     </Card>
 </template>
@@ -18,11 +14,17 @@
     import { Component, Vue } from 'vue-property-decorator'
     import UserInfo from './components/UserInfo.vue'
     import UserAccessKey from './components/UserAccessKey.vue'
+    import ChangeUserInfo from './components/ChangeUserInfo.vue'
+    import ChangePassword from './components/ChangePassword.vue'
+    import ChangeHeadimg from './components/ChangeHeadimg.vue'
 
     @Component({
         components: {
             UserInfo,
-            UserAccessKey
+            UserAccessKey,
+            ChangeUserInfo,
+            ChangePassword,
+            ChangeHeadimg
         }
     })
     export default class User extends Vue {

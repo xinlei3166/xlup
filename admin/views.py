@@ -186,23 +186,13 @@ class UserDetailsAdmin(View):
         """删除用户"""
         user_id = uid
         user = await request.app.db.get(
-            "select user.id, user.username, user.nickname, user.gender, user.phone, user.email, user_secret.secret from user join user_secret on user.id = user_secret.user_id where user.delete_flag = 0 and user.id = %s;",
-            (user_id,))
+            "select user.id from user where user.delete_flag = 0 and user.id = %s;", (user_id,))
         if not user:
-            return response.json({'code': 'UsernameNotExist', 'msg': 'username not exist'})
-        allows = ('nickname', 'gender', 'phone', 'email', 'password')
-        data = {k: request.form.get(k) for k in request.form.keys()}
-        db = request.app.db
-        for k, v in data.items():
-            if k not in allows:
-                return response.json({'code': 'InvalidParams', 'msg': 'contains invalid params'})
-            if v:
-                res = await getattr(self, 'validate_{}'.format(k))(v, user=user, db=db)
-                if res:
-                    return res
-        cleaned_data = self.clean(user, data)
-        return await self.change_user_and_write_table(db, user, tuple(cleaned_data.keys()),
-                                                      tuple(cleaned_data.values()))
+            return response.json({'code': 'UserNotExist', 'msg': 'user not exist'})
+        res = await request.app.db.delete("delete user, user_secret, access_key from user left join user_secret on user.id = user_secret.user_id left join access_key on user_secret.user_id = access_key.user_id where user.id = %s;", (user_id,))
+        if res is not None:
+            return response.json({'code': 'Success'})
+        return response.json({'code': 'DeleteUserFail', 'msg': 'delete user fail'})
 
 
 class PicAdmin(View):
@@ -218,11 +208,11 @@ class PicAdmin(View):
         _start = (page - 1) * per_page
         if q:
             count_res = await request.app.db.get(
-                "select count(id) as count from pic where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`delete_flag` = 0;",
+                "select count(pic.`id`) as count from pic left join user on pic.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, ''), ',', ifnull(user.`nickname`, '')) like %s and pic.`delete_flag` = 0;",
                 ('%%%s%%' % q,))
             count = count_res['count']
             res = await request.app.db.query(
-                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, ifnull(user.`nickname`, '未知') as user, pic.`create_time`, pic.`update_time` from pic left join user on pic.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
+                "select pic.`id`, pic.`title`, pic.`description`, concat(%s, pic.`path`) as pic, ifnull(user.`nickname`, '未知') as user, pic.`create_time`, pic.`update_time` from pic left join user on pic.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, ''), ',', ifnull(user.`nickname`, '')) like %s and pic.`delete_flag` = 0 order by id desc limit %s, %s;",
                 (prefix, '%%%s%%' % q, _start, per_page))
         else:
             count_res = await request.app.db.get(
@@ -243,8 +233,7 @@ class PicDetailsAdmin(View):
     async def delete(self, request, pic_id, **kwargs):
         """删除图片"""
         pic = await request.app.db.get(
-            "select pic.id, pic.path from pic where delete_flag = 0 and pic.id = %s",
-            (pic_id,))
+            "select pic.id, pic.path from pic where delete_flag = 0 and pic.id = %s", (pic_id,))
         if not pic:
             return response.json({'code': 'PicNotExist', 'msg': 'pic not exist'})
         path = pathlib.Path(request.app.config.MEDIA_DIR)
@@ -271,11 +260,11 @@ class VideoAdmin(View):
         _start = (page - 1) * per_page
         if q:
             count_res = await request.app.db.get(
-                "select count(id) as count from video where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`delete_flag` = 0;",
+                "select count(video.`id`) as count from video left join user on video.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, ''), ',', ifnull(user.`nickname`, '')) like %s and video.`delete_flag` = 0;",
                 ('%%%s%%' % q,))
             count = count_res['count']
             res = await request.app.db.query(
-                "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, ifnull(user.nickname, '未知') as user, video.`create_time`, video.`update_time` from video left join user on video.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, '')) like %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
+                "select video.`id`, video.`title`, video.`description`, concat(%s, video.`pic`) as pic, concat(%s, video.`path`) as video, ifnull(user.nickname, '未知') as user, video.`create_time`, video.`update_time` from video left join user on video.user_id = user.id where concat(ifnull(`title`, ''), ',', ifnull(`description`, ''), ',', ifnull(user.`nickname`, '')) like %s and video.`delete_flag` = 0 order by id desc limit %s, %s;",
                 (prefix, prefix, '%%%s%%' % q, _start, per_page))
         else:
             count_res = await request.app.db.get(

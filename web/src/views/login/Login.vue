@@ -51,18 +51,6 @@
             ]
         }
 
-        validatePassword(rule, value, callback) {
-            if (value === "") {
-                callback(new Error("Please enter your password"));
-            } else {
-                if (this.form.password !== "") {
-                    // 对第二个密码框单独验证
-                    console.log(this.$refs.loginForm);
-                }
-                callback();
-            }
-        }
-
         @checkToken()
         async _getUserInfo(...args): Promise<any> {
             const data = args[0]

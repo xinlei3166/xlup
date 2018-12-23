@@ -1,6 +1,10 @@
 <template>
     <div>
         <Card>
+            <div class="search-con">
+                <Input v-model="q" search placeholder="输入关键字搜索" @on-search="onSearch" class="search-input"/>
+                <Button class="search-btn" type="primary" @click="onAll">全部</Button>
+            </div>
             <MyTable ref="table" :height="tableHeight" :columns="columns" :data="data"></MyTable>
         </Card>
         <Paginator ref="paginator" :total="total" :currentPage="currentPage" :pageSize="pageSize" :onChange="onChange" :onPageSizeChange="onPageSizeChange"></Paginator>
@@ -12,7 +16,8 @@
     import MyTable from "@/components/MyTable.vue"
     import Paginator from "@/components/Paginator.vue"
     import { checkToken } from "@/utils/decorators"
-    import { getPicApi, deletePicApi } from "@/api/pic"
+    import { getPicAdminApi, deletePicAdminDetailsApi } from "@/api/pic"
+    import { tooltip, stripSpaceCharacter } from "@/utils/util"
 
     @Component({
         components: { MyTable, Paginator }
@@ -32,11 +37,16 @@
             {
                 title: "标题",
                 key: "title",
+                render: (h, params) => {
+                    return tooltip(h, params.row.title, 16)
+                }
             },
             {
                 title: "描述",
                 key: "description",
-                ellipsis: true
+                render: (h, params) => {
+                    return tooltip(h, params.row.description, 16)
+                }
             },
             {
                 title: "图片",
@@ -56,9 +66,13 @@
                 }
             },
             {
+                title: "用户",
+                key: "user",
+                ellipsis: true
+            },
+            {
                 title: "功能",
                 key: "action",
-                tooltip: true,
                 width: 150,
                 align: "center",
                 render: (h: any, params: any) => {
@@ -94,6 +108,7 @@
 
         tableHeight = 0
 
+        q = ''
         currentPage = 1
         pageSize = 20
         data = []
@@ -105,7 +120,11 @@
         }
 
         async getData(): Promise<void> {
-            const data = await this._getData(getPicApi, {page: this.currentPage, per_page: this.pageSize})
+            const params = {page: this.currentPage, per_page: this.pageSize}
+            if (this.q !== ''){
+                params['q'] = this.q
+            }
+            const data = await this._getData(getPicAdminApi, params)
             if (data) {
                 this.data = data.data
                 this.total = data.total
@@ -125,6 +144,18 @@
             }
         }
 
+        async onSearch(value: string): Promise<void> {
+            this.q = stripSpaceCharacter(value)
+            this.currentPage = 1
+            await this.getData()
+        }
+
+        async onAll(): Promise<void> {
+            this.q = ''
+            this.currentPage = 1
+            await this.getData()
+        }
+
         @checkToken()
         async deleteData(...args): Promise<boolean> {
             const data = args[0]
@@ -137,7 +168,7 @@
         }
 
         async remove(id: number): Promise<void> {
-            const ret = await this.deleteData(deletePicApi, id)
+            const ret = await this.deleteData(deletePicAdminDetailsApi, id)
             if (ret) {
                 await this.getData()
                 this.$Notice.success({'title': '删除成功'})
@@ -167,4 +198,17 @@
 </script>
 
 <style lang="stylus" scoped>
+    .search-con
+        padding: 0 0 10px 0
+
+        .search
+            &-input
+                display: inline-block
+                width: 300px
+                margin-left: 2px
+            &-btn
+                margin-left: 15px
+            &-btn-right
+                float right
+                margin-right 30px
 </style>

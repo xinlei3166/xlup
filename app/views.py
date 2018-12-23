@@ -20,7 +20,7 @@ from utils.token import token
 from utils.exceptions import APIParameterError
 from utils.decorators import check_token, check_permission, cache, check_access_sign
 from utils.paginator import Paginator
-from utils.access_key import generate_access_key_id, generate_access_key_secret
+from utils.access_key import generate_access_key_id, generate_access_key_secret, get_access_key, generate_policy, generate_policy_sign
 from . import forms
 
 web = Blueprint('xlup')
@@ -133,16 +133,16 @@ class UserLogout(View):
 class UserMe(View):
     """用户自身信息"""
 
-    @cache(expire=60 * 60 * 24)
+    # @cache(expire=60 * 60 * 24)
     async def get_userinfo(self, request, user_id, **kwargs):
-        cache_key = kwargs.get('cache_key')
-        expire = kwargs.get('expire')
+        # cache_key = kwargs.get('cache_key')
+        # expire = kwargs.get('expire')
         prefix = "{}/media/".format(request.app.config.UPLOAD_DOMAIN)
         default_head_img = "default.png"
         userinfo = await request.app.db.get(
             "select user.nickname, concat(%s, ifnull(user.head_img, %s)) as head_img, user.gender, user.email, user.phone, role.name as role_name, role.codename as role_codename from user join role on user.role_id = role.id where user.id = %s;",
             (prefix, default_head_img, user_id))
-        await request.app.cache.set(cache_key, json.dumps(userinfo), expire=expire)
+        # await request.app.cache.set(cache_key, json.dumps(userinfo), expire=expire)
         return userinfo
 
     @check_token
@@ -240,7 +240,7 @@ class UserMePassword(View):
         password = hmac_sha256(user['secret'], new_password)
         res = await request.app.db.update("update user set user.password = %s where user.id = %s;",
                                           (password, user['id']))
-        if not res:
+        if res is None:
             return response.json({'code': 'UpdatePasswordFail', 'msg': 'update password fail'})
         return response.json({'code': 'Success'})
 
@@ -300,7 +300,7 @@ class UserMeHeadimg(View):
             old_filepath.unlink()
         res = await request.app.db.update(
             "update user set head_img = %s where id = %s;", (media_path, user_id))
-        if not res:
+        if res is None:
             return response.json({'code': 'UpdateHeadimgFail', 'msg': 'update headimg fail'})
         return response.json({'code': 'Success'})
 
@@ -340,6 +340,22 @@ class UserMeAccessKey(View):
                  'data': {'access_key_id': access_key_id, 'access_key_secret': access_key_secret}},
                 dumps=json_dumps)
         return response.json({'code': 'NewAccessKeyFail', 'msg': 'new access key fail'}, dumps=json_dumps)
+
+
+class UploadPolicy(View):
+    """获取upload policy, form表单上传使用"""
+
+    @check_token
+    async def get(self, request, **kwargs):
+        user_id = kwargs.get('user_id')
+        access_key = await get_access_key(request.app.db, user_id)
+        if not access_key:
+            return response.json({'code': 'AccessKeyNotExist', 'msg': 'access key not exist'}, dumps=json_dumps)
+        access_key_id = access_key['access_key_id']
+        policy = generate_policy()
+        sign = generate_policy_sign(access_key['access_key_secret'], policy)
+        data = {'access_key_id': access_key_id, 'policy': policy, 'sign': sign}
+        return response.json({'code': 'Success', 'data': data})
 
 
 class Pic(View):

@@ -1,15 +1,16 @@
 <template>
     <div>
-        <Card ref="card">
+        <Card>
             <div class="search-con">
-                <Input clearable placeholder="输入关键字搜索" class="search-input"/>
-                <Button class="search-btn" type="primary">搜索</Button>
+                <Input v-model="q" search placeholder="输入关键字搜索" @on-search="onSearch" class="search-input"/>
+                <Button class="search-btn" type="primary" @click="onAll">全部</Button>
                 <Button class="search-btn-right" type="primary" @click="addUserModal=true">新增用户</Button>
                 <Modal
                         title="新增用户"
                         v-model="addUserModal"
                         :mask-closable="false"
-                        @on-ok="onAddUser">
+                        @on-ok="onAddUser"
+                        @on-cancel="onCancel">
                     <Form ref="addUserForm" :model="form" :rules="rules" :label-width="100" style="margin-top: 16px">
                         <FormItem prop="username" label="用户名">
                             <Input type="text" v-model="form.username" placeholder="请输入用户名"
@@ -45,12 +46,13 @@
 </template>
 
 <script lang="ts">
-    import {Component, Vue, Watch} from "vue-property-decorator";
+    import { Component, Vue, Watch } from "vue-property-decorator"
     import MyTable from "@/components/MyTable.vue"
     import Paginator from "@/components/Paginator.vue"
-    import {checkToken} from "@/utils/decorators"
-    import {tooltip} from "@/utils/util"
-    import {getUserAdminApi, postUserAdminApi, deleteUserAdminApi} from "@/api/user"
+    import { checkToken } from "@/utils/decorators"
+    import { tooltip, stripSpaceCharacter } from "@/utils/util"
+    import { getUserAdminApi, postUserAdminApi, patchUserDetailsAdminApi, deleteUserDetailsAdminApi } from "@/api/user"
+
 
     @Component({
         components: {MyTable, Paginator}
@@ -109,6 +111,20 @@
                 align: "center",
                 render: (h: any, params: any) => {
                     return h("div", [
+                        h("Button", {
+                            props: {
+                                type: "warning",
+                                size: "small"
+                            },
+                            style: {
+                                marginRight: "5px"
+                            },
+                            on: {
+                                click: () => {
+                                    this.onChangePassword(h, params.row.nickname, params.row.id)
+                                },
+                            }
+                        }, "密码"),
                         h("Poptip", {
                             props: {
                                 confirm: true,
@@ -120,9 +136,12 @@
                                 type: "error",
                                 size: "small",
                             },
+                            style: {
+                                marginRight: "5px"
+                            },
                             on: {
                                 "on-ok": () => {
-                                    this.remove(params.row.id)
+                                    this.onRemove(params.row.id)
                                 },
                             }
                         }, [
@@ -199,8 +218,11 @@
             ]
         }
 
+        newPassword = ''
+
         tableHeight = 0
 
+        q = ''
         currentPage = 1
         pageSize = 20
         data = []
@@ -212,7 +234,11 @@
         }
 
         async getData(): Promise<void> {
-            const data = await this._getData(getUserAdminApi, {page: this.currentPage, per_page: this.pageSize})
+            const params = {page: this.currentPage, per_page: this.pageSize}
+            if (this.q !== ''){
+                params['q'] = this.q
+            }
+            const data = await this._getData(getUserAdminApi, params)
             if (data) {
                 this.data = data.data
                 this.total = data.total
@@ -232,45 +258,15 @@
             }
         }
 
-        formatGender(gender: string): string {
-            switch (gender) {
-                case "male":
-                    return "男"
-                case "female":
-                    return "女"
-                default:
-                    return "未知"
-            }
-        }
-
-        @checkToken()
-        async deleteData(...args): Promise<boolean> {
-            const data = args[0]
-            switch (data.code) {
-                case "Success":
-                    return true
-                default:
-                    return false
-            }
-        }
-
-        async remove(id: number): Promise<void> {
-            const ret = await this.deleteData(deleteUserAdminApi, id)
-            if (ret) {
-                await this.getData()
-                this.$Notice.success({"title": "删除成功"})
-            } else {
-                this.$Notice.error({"title": "删除失败"})
-            }
-        }
-
-        async onChange(currentPage: number): Promise<void> {
-            this.currentPage = currentPage
+        async onSearch(value: string): Promise<void> {
+            this.q = stripSpaceCharacter(value)
+            this.currentPage = 1
             await this.getData()
         }
 
-        async onPageSizeChange(pageSize: number): Promise<void> {
-            this.pageSize = pageSize
+        async onAll(): Promise<void> {
+            this.q = ''
+            this.currentPage = 1
             await this.getData()
         }
 
@@ -290,6 +286,7 @@
                 if (valid) {
                     const ret = await this.addUser(postUserAdminApi, this.form)
                     if (ret) {
+                        (this.$refs.addUserForm as any).resetFields()
                         await this.getData()
                         this.$Notice.success({"title": "新增用户成功"})
                     } else {
@@ -297,6 +294,102 @@
                     }
                 }
             })
+        }
+
+        onCancel() {
+            (this.$refs.addUserForm as any).resetFields()
+        }
+
+        formatGender(gender: string): string {
+            switch (gender) {
+                case "male":
+                    return "男"
+                case "female":
+                    return "女"
+                default:
+                    return "未知"
+            }
+        }
+
+        @checkToken()
+        async changePassword(...args): Promise<boolean> {
+            const data = args[0]
+            switch (data.code) {
+                case "Success":
+                    return true
+                default:
+                    return false
+            }
+        }
+
+        onChangePassword(h: any, nickname: string, user_id: number) {
+            this.$Modal.confirm({
+                title: `正在为${nickname}重置密码`,
+                width: 360,
+                onOk: async (): Promise<void> => {
+                    const data = {'password': this.newPassword}
+                    const ret = await this.changePassword(patchUserDetailsAdminApi, user_id, data)
+                    if (ret) {
+                        this.$Notice.success({title: '重置密码成功'})
+                    } else {
+                        this.$Notice.error({title: '重置密码失败'})
+                    }
+                },
+                onCancel: () => {
+                    this.newPassword = ''
+                },
+                render: () => {
+                    return h("Input", {
+                        props: {
+                            size: "large",
+                            type: "password",
+                            maxlength: 20,
+                            autofocus: true,
+                            clearable: true,
+                            placeholder: "请输入新密码"
+                        },
+                        style: {
+                            marginTop: "10px",
+                        },
+                        on: {
+                            'on-blur': (event: any): void => {
+                                this.newPassword = event.target.value
+                            }
+                        }
+                    })
+                }
+            })
+        }
+
+        @checkToken()
+        async deleteData(...args): Promise<boolean> {
+            const data = args[0]
+            switch (data.code) {
+                case "Success":
+                    return true
+                default:
+                    return false
+            }
+        }
+
+        async onRemove(id: number): Promise<void> {
+            const ret = await this.deleteData(deleteUserDetailsAdminApi, id)
+            if (ret) {
+                await this.getData()
+                this.$Notice.success({"title": "删除成功"})
+            } else {
+                this.$Notice.error({"title": "删除失败"})
+            }
+        }
+
+        async onChange(currentPage: number): Promise<void> {
+            this.currentPage = currentPage
+            await this.getData()
+        }
+
+        async onPageSizeChange(pageSize: number): Promise<void> {
+            this.pageSize = pageSize
+            await this.getData()
         }
 
         @Watch("data")
@@ -314,17 +407,14 @@
         padding: 0 0 10px 0
 
         .search
-            &-col
-                display: inline-block
-                width: 200px
 
             &-input
                 display: inline-block
-                width: 200px
+                width: 300px
                 margin-left: 2px
 
             &-btn
-                margin-left: 2px
+                margin-left: 15px
 
             &-btn-right
                 float right

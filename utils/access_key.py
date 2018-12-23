@@ -11,6 +11,12 @@ import shortuuid
 from utils.base import carry_key_hash_md5
 
 
+async def get_access_key(db, user_id):
+    access_key = await db.get("select access_key_id, access_key_secret from access_key where user_id = %s", (user_id,))
+    if access_key:
+        return access_key
+
+
 async def get_access_key_secret(db, access_key_id):
     access_key = await db.get("select access_key_secret from access_key where access_key_id = %s", (access_key_id,))
     if access_key:

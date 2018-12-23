@@ -12,7 +12,7 @@ axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded
 axios.interceptors.request.use(
     config => {
         // const token = getCookie('名称');注意使用的时候需要引入cookie方法，推荐js-cookie
-        config.data = qs.stringify(config.data);
+        // config.data = qs.stringify(config.data);
         // if(token){
         //   config.params = {'token': token}
         // }
@@ -95,7 +95,11 @@ async function get(url: string, params: object = {}, auth: boolean = false, toke
         } catch (e) {
             localToken = ''
         }
-        config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        if (config['headers']) {
+            config['headers']['Authorization'] = `Bearer ${!token ? localToken : token}`
+        } else {
+            config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        }
     }
     try {
         return await request(config)
@@ -104,7 +108,7 @@ async function get(url: string, params: object = {}, auth: boolean = false, toke
     }
 }
 
-async function post(url: string, data: object = {}, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
+async function post(url: string, data: any, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
     config['method'] = 'post'
     config['url'] = url
     config['data'] = data
@@ -115,7 +119,11 @@ async function post(url: string, data: object = {}, auth: boolean = false, token
         } catch (e) {
             localToken = ''
         }
-        config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        if (config['headers']) {
+            config['headers']['Authorization'] = `Bearer ${!token ? localToken : token}`
+        } else {
+            config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        }
     }
     try {
         return await request(config)
@@ -124,7 +132,7 @@ async function post(url: string, data: object = {}, auth: boolean = false, token
     }
 }
 
-async function put(url: string, data: object = {}, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
+async function put(url: string, data: any, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
     config['method'] = 'put'
     config['url'] = url
     config['data'] = data
@@ -135,7 +143,11 @@ async function put(url: string, data: object = {}, auth: boolean = false, token:
         } catch (e) {
             localToken = ''
         }
-        config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        if (config['headers']) {
+            config['headers']['Authorization'] = `Bearer ${!token ? localToken : token}`
+        } else {
+            config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        }
     }
     try {
         return await request(config)
@@ -144,7 +156,7 @@ async function put(url: string, data: object = {}, auth: boolean = false, token:
     }
 }
 
-async function patch(url: string, data: object = {}, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
+async function patch(url: string, data: any, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
     config['method'] = 'patch'
     config['url'] = url
     config['data'] = data
@@ -155,7 +167,11 @@ async function patch(url: string, data: object = {}, auth: boolean = false, toke
         } catch (e) {
             localToken = ''
         }
-        config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        if (config['headers']) {
+            config['headers']['Authorization'] = `Bearer ${!token ? localToken : token}`
+        } else {
+            config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        }
     }
     try {
         return await request(config)
@@ -164,7 +180,7 @@ async function patch(url: string, data: object = {}, auth: boolean = false, toke
     }
 }
 
-async function _delete(url: string, data: object = {}, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
+async function _delete(url: string, data: any, auth: boolean = false, token: string = '', config: object = {}): Promise<any> {
     config['method'] = 'delete'
     config['url'] = url
     config['data'] = data
@@ -175,7 +191,11 @@ async function _delete(url: string, data: object = {}, auth: boolean = false, to
         } catch (e) {
             localToken = ''
         }
-        config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        if (config['headers']) {
+            config['headers']['Authorization'] = `Bearer ${!token ? localToken : token}`
+        } else {
+            config['headers'] = {Authorization: `Bearer ${!token ? localToken : token}`}
+        }
     }
     try {
         return await request(config)

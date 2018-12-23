@@ -25,3 +25,4 @@ export const checkPermission = (item: boolean): boolean => {
     const permission = (Store.state.userInfo as any).role_codename
     return item === true ? permission === 'admin' : true
 }
+
