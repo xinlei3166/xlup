@@ -171,7 +171,7 @@
         rules = {
             username: [
                 {required: true, message: "用户名不能为空", trigger: "blur"},
-                {type: "string", min: 4, max: 20, message: "用户名最小长度为2, 最大长度为20", trigger: "blur"}
+                {type: "string", min: 2, max: 20, message: "用户名最小长度为2, 最大长度为20", trigger: "blur"}
             ],
             password: [
                 {required: true, message: "密码不能为空", trigger: "blur"},

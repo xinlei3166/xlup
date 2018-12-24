@@ -186,7 +186,7 @@
 
         showVideo(title: string, path: string): void {
             this.$Modal.info({
-                closable: true,
+                closable: false,
                 width: '800px',
                 title: `${title}`,
                 content: `<div style="width: 100%;padding: 12px 20px 0 20px"><video src="${path}" controls></div>`,
