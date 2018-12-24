@@ -24,7 +24,7 @@ async def get_access_key_secret(db, access_key_id):
 
 
 def generate_access_key_id():
-    return "MGC{}".format(shortuuid.ShortUUID().random(length=16))
+    return "XL{}".format(shortuuid.ShortUUID().random(length=16))
 
 
 def generate_access_key_secret(key, access_key_id):

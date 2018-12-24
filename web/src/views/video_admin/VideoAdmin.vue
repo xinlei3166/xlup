@@ -185,8 +185,8 @@
         }
 
         showVideo(title: string, path: string): void {
-            this.$Modal.success({
-                closable: false,
+            this.$Modal.info({
+                closable: true,
                 width: '800px',
                 title: `${title}`,
                 content: `<div style="width: 100%;padding: 12px 20px 0 20px"><video src="${path}" controls></div>`,
@@ -237,9 +237,6 @@
 </script>
 
 <style lang="stylus" scoped>
-    >>> .ivu-modal-confirm-footer
-        display: none
-
     .search-con
         padding: 0 0 10px 0
 

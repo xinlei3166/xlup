@@ -3,7 +3,7 @@ import { refreshTokenApi } from '@/api/user'
 
 export const getToken = (): object => {
     const token = localStorage.getItem('token')
-    return JSON.parse(token === 'undefined' ? '{}' : token)
+    return JSON.parse(token === null ? '{}' : token)
 }
 
 export const setToken = (token: object): void => {

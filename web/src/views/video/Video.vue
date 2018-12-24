@@ -281,7 +281,7 @@
                     this.$Notice.error({title: '请在个人信息页面设置Access_key'})
                 }
             }
-            if ((this.$refs.pic_input as any).files.length > 0) {
+            if ((this.$refs.pic_input as any).files.length > 0 && (this.$refs.video_input as any).files.length > 0) {
                 const formData = new FormData()
                 const pic = (this.$refs.pic_input as any).files[0]
                 const video = (this.$refs.video_input as any).files[0]
@@ -299,12 +299,14 @@
                 } else {
                     this.$Notice.error({title: '新增视频失败'})
                 }
+            } else {
+                this.$Notice.warning({title: '图片和视频不存在'})
             }
         }
 
         showVideo(title: string, path: string): void {
-            this.$Modal.success({
-                closable: false,
+            this.$Modal.info({
+                closable: true,
                 width: '800px',
                 title: title,
                 content: `<div style="width: 100%;padding: 12px 20px 0 20px"><video src="${path}" controls></div>`,
@@ -357,9 +359,6 @@
 </script>
 
 <style lang="stylus" scoped>
-    >>> .ivu-modal-confirm-footer
-        display: none
-
     .search-con
         padding: 0 0 10px 0
 
